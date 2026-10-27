@@ -77,6 +77,40 @@ setuid(0) = 0
 uid=0 euid=0
 ```
 
+#### 常驻模式：`--daemon`
+
+一次性 `execvp` 只能跑一条命令，每次都要重新过一遍后门。实际用起来需要一个
+**常驻的 root 命令通道**，于是 `twroot` 支持把自己变成守护进程：
+
+```bash
+./twroot --daemon /data/local/tmp/t      # 或者任一个 app 可写的目录
+```
+
+它会 `setuid(0)` 之后双 `fork()` + `setsid()`，变成和调用者无关的独立进程
+（被 pid 1 收养），所以拉起它的 app 被杀掉也不会带走它。然后用 pid 文件保证
+**重复调用是空操作**（两个守护进程同时轮询会抢命令文件）。
+
+协议（`<workdir>` 内）：
+
+```
+调用方  echo '...' > rcmd.tmp && mv rcmd.tmp rcmd.sh      # mv 是原子的
+守护    mv rcmd.sh → rcmd.run
+        sh rcmd.run >> rs_out.txt
+        echo '##EXIT=<code>##' >> rs_out.txt
+```
+
+两个必须踩过的坑：
+
+- **`rs_out.txt` 必须是 0666**。root 建的 `> file` 是 `0600 root:root`，
+  以 app 身份运行的调用方读不到，表现为「命令跑了但没有输出」。
+  正确做法是调用方自己 `exec >> rs_out.txt`，并且预先 `chmod 666`。
+- **守护进程必须把三个标准流都接到 `/dev/null`**。只换 stdin 不够：
+  调用方用管道读输出，只要守护进程还攥着管道写端，父进程就永远等不到 EOF，
+  会一路卡到超时才返回。
+
+守护进程是单线程的，一条没有边界的命令（例如 `grep -r /`）会把整条通道堵死，
+连 `kill` 都发不进去。所以客户端必须挂看门狗 —— 见 `tools/rootshell.py`。
+
 ### 路径 ②：Dirty COW
 
 见 [docs/03-dirtycow-attack.md](docs/03-dirtycow-attack.md)。
@@ -97,7 +131,7 @@ uid=0 euid=0
 
 | 文件 | 作用 |
 |---|---|
-| `src/twroot.c` | `/dev/tw` 后门 root 启动器（最简可用的提权工具） |
+| `src/twroot.c` | `/dev/tw` 后门 root 启动器：一次性执行 + `--daemon` 常驻命令通道 |
 | `src/cowtest.c` | Dirty COW 存在性自检（判据是磁盘内容真被改） |
 | `src/cowwrite.c` | Dirty COW 任意写（分阶段 + 独立 verify） |
 | `tools/make_daemon_payload.py` | 生成「root 命令守护进程」静态 ARM payload |
@@ -108,7 +142,7 @@ uid=0 euid=0
 三个 C 工具都只依赖 libc，静态编译即可（设备上的 linker/glibc 版本不一定配得上）：
 
 ```bash
-arm-linux-gnueabihf-gcc -static -O2 -pthread -o twroot   src/twroot.c
+arm-linux-gnueabihf-gcc -static -O2 -o twroot   src/twroot.c
 arm-linux-gnueabihf-gcc -static -O2 -pthread -o cowtest  src/cowtest.c
 arm-linux-gnueabihf-gcc -static -O2 -pthread -o cowwrite src/cowwrite.c
 ```
