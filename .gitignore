@@ -1,0 +1,43 @@
+# 编译产物
+*.o
+*.a
+*.so
+twroot
+cowtest
+cowwrite
+payload*
+daemon_*
+*.new
+*.orig
+*.S
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 凭据 / 配置（通配写法，兼容各类 .tok… 后缀的访问凭证文件）
+*.env
+.env
+*.tok*
+*.pem
+*.key
+*.pub
+*.p12
+*.keystore
+secrets*
+
+# 被分析/篡改的二进制与安装包
+*.apk
+*.ap_
+*.dex
+*.odex
+*.jar
+
+# 本地临时
+tmp/
+scratch/
+*.log
+*.bak
+.DS_Store
