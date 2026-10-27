@@ -126,6 +126,8 @@ uid=0 euid=0
 | [docs/03-dirtycow-attack.md](docs/03-dirtycow-attack.md) | 两段式 Dirty COW 攻击：空壳陷阱、I-cache、init 重启语义 |
 | [docs/04-root-channel.md](docs/04-root-channel.md) | 不依赖 adb / setuid 的 root 命令通道 |
 | [docs/05-dead-ends.md](docs/05-dead-ends.md) | 走过的死路（含原因），省你几个小时 |
+| [docs/06-tooling-for-bare-devices.md](docs/06-tooling-for-bare-devices.md) | **实战延伸**：没有 busybox 的设备上，怎么自己造工具（httpget / findstr） |
+| [docs/07-carplay-feasibility.md](docs/07-carplay-feasibility.md) | **实战延伸**：无线 CarPlay 在这台车机上到底可行吗（硬件/协议层体检报告） |
 
 ## 代码
 
@@ -134,18 +136,27 @@ uid=0 euid=0
 | `src/twroot.c` | `/dev/tw` 后门 root 启动器：一次性执行 + `--daemon` 常驻命令通道 |
 | `src/cowtest.c` | Dirty COW 存在性自检（判据是磁盘内容真被改） |
 | `src/cowwrite.c` | Dirty COW 任意写（分阶段 + 独立 verify） |
+| `src/httpget.c` | 最小 HTTP/1.0 客户端：车机上没有 curl/wget 时用它抓内网设备 |
+| `src/findstr.c` | 子串定位器：打印命中偏移 + 前后字节窗口（toolbox 的 grep 没有 `-o/-n/-b`） |
 | `tools/make_daemon_payload.py` | 生成「root 命令守护进程」静态 ARM payload |
 | `tools/rootshell.py` | root 命令通道客户端（带看门狗） |
 
 ### 构建
 
-三个 C 工具都只依赖 libc，静态编译即可（设备上的 linker/glibc 版本不一定配得上）：
+五个 C 工具都只依赖 libc，静态编译即可（设备上的 linker/glibc 版本不一定配得上）：
 
 ```bash
 arm-linux-gnueabihf-gcc -static -O2 -o twroot   src/twroot.c
 arm-linux-gnueabihf-gcc -static -O2 -pthread -o cowtest  src/cowtest.c
 arm-linux-gnueabihf-gcc -static -O2 -pthread -o cowwrite src/cowwrite.c
+arm-linux-gnueabihf-gcc -static -O2 -o httpget  src/httpget.c
+arm-linux-gnueabihf-gcc -static -O2 -o findstr  src/findstr.c
 ```
+
+> `httpget` 静态链接时 `ld` 会报一个 `gethostbyname` 的 warning
+> （提示运行时可能需要匹配版本的 glibc 共享库）。这是 glibc 的正常提示，
+> 不是错误 —— 传点分十进制 IP 会走 `inet_pton`，完全绕开 DNS。
+> 详见 [docs/06-tooling-for-bare-devices.md](docs/06-tooling-for-bare-devices.md)。
 
 Python 工具不依赖第三方包，只用 stdlib。所有路径都是参数或环境变量，
 默认值指向 `/data/local/tmp/rootd`，按自己的环境改：

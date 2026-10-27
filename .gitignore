@@ -17,10 +17,12 @@ __pycache__/
 .venv/
 venv/
 
-# 凭据 / 配置（通配写法，兼容各类 .tok… 后缀的访问凭证文件）
+# 凭据 / 配置（通配写法，兼容各类访问凭证文件的后缀与前缀）
 *.env
 .env
-*.tok*
+*.cred*
+*.access*
+*.secret*
 *.pem
 *.key
 *.pub
